@@ -12,3 +12,13 @@ def encrypt_url(url):
     encrypted = iv + ciphertext
     b64_encoded = base64.urlsafe_b64encode(encrypted).decode().rstrip('=')
     return b64_encoded
+
+
+
+# Usage
+
+url = "https://arolinks.com/7INN"
+encrypted_link = encrypt_url(url)
+print(encrypted_link)
+worker_url = 'https://your-worker.example.com/{encrypted_link}'
+last_link = f"{worker_url}/{encrypted_link}"
