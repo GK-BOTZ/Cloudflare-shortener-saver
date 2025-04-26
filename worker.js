@@ -1,4 +1,4 @@
-const SECRET_KEY = 'your-32-characters-secret-key'
+const SECRET_KEY = 'hyW50pRdFpXB4Rw2fxAv7i9K6QpyNIzG'
 
 async function encrypt(text) {
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET_KEY), { name: 'AES-GCM' }, false, ['encrypt'])
