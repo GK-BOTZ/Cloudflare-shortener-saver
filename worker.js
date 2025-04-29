@@ -1,5 +1,5 @@
 const SECRET_KEY       = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet'
-const REDIRECT_DELAY_MS = 50
+const REDIRECT_DELAY_MS = 5000
 
 async function decryptToken(token) {
   const bin   = atob(token.replace(/-/g,'+').replace(/_/g,'/'))
@@ -17,138 +17,124 @@ async function decryptToken(token) {
   return new TextDecoder().decode(dec)
 }
 
+// Rewrite <head> to inject delayed redirect back to /TOKEN?go=1
 class HeadInjector {
   constructor(path) { this.path = path }
-  element(element) {
-    element.append(
+  element(el) {
+    el.append(
       `<script>
          setTimeout(()=>{
-           window.location.href = ${JSON.stringify(this.path + '?go=1')}
-         }, ${REDIRECT_DELAY_MS});
+           window.location.href=${JSON.stringify(this.path+'?go=1')}
+         },${REDIRECT_DELAY_MS});
        </script>`,
       { html: true }
     )
   }
 }
 
-class AnchorRewriter {
-  constructor(path) { this.path = path }
-  element(element) {
-    element.setAttribute('href', this.path + '?go=1')
+// Rewrite all links to stay under /TOKEN
+class LinkRewriter {
+  constructor(path) { this.path=path }
+  element(el) {
+    const attr = el.tagName==='LINK'?'href':'src'
+    const url = el.getAttribute(attr)
+    if(url && /^https?:\/\//.test(url)) {
+      el.setAttribute(attr, this.path+'?asset='+encodeURIComponent(url))
+    }
   }
 }
 
+// Serve landing page
 function renderLanding() {
   return new Response(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Short GK</title>
-  <style>
-    body { margin:0; font-family:Arial,sans-serif; color:#333; }
-    header { background:#007acc; color:#fff; padding:2rem 1rem; text-align:center; }
-    header h1 { margin:0; font-size:3rem; }
-    nav a { color:#fff; margin:0 1rem; text-decoration:none; font-weight:bold; }
-    .hero { padding:4rem 1rem; text-align:center; }
-    .hero h2 { font-size:2rem; margin-bottom:1rem; }
-    .hero p { max-width:600px; margin:0 auto 2rem; line-height:1.5; }
-    .btn { display:inline-block; padding:0.75rem 1.5rem; background:#007acc; color:#fff; text-decoration:none; border-radius:4px; }
-    .features { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:1rem; padding:2rem 1rem; }
-    .feature { background:#f5f5f5; padding:1.5rem; border-radius:6px; text-align:center; }
-    footer { background:#222; color:#aaa; text-align:center; padding:1rem; }
-    footer a { color:#007acc; text-decoration:none; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Short GK</h1>
-    <nav>
-      <a href="https://t.me/GKBotz" target="_blank">Telegram Channel</a>
-    </nav>
+<html><head><meta charset="utf-8">
+<title>Short GK</title>
+<style>
+  body{margin:0;font-family:Arial,sans-serif;color:#333}
+  header{background:#007acc;color:#fff;padding:2rem;text-align:center}
+  .hero{padding:4rem;text-align:center}
+  .btn{background:#007acc;color:#fff;padding:.75rem 1.5rem;text-decoration:none;border-radius:4px}
+</style>
+</head><body>
+  <header><h1>Short GK</h1>
+    <nav><a href="https://t.me/GKBotz" style="color:#fff">Telegram Channel</a></nav>
   </header>
   <section class="hero">
     <h2>Secure & Invisible URL Shortener</h2>
-    <p>Short GK makes your links untraceable, fast, and secure. No one can see where your users go — ultimate privacy at the edge.</p>
-    <a class="btn" href="#get-started">Get Started</a>
+    <a class="btn" href="#start">Get Started</a>
   </section>
-  <section id="get-started" class="features">
-    <div class="feature">
-      <h3>End-to-End Encryption</h3>
-      <p>Your URLs are AES-GCM encrypted. Only our edge Worker can decrypt them.</p>
-    </div>
-    <div class="feature">
-      <h3>5-Second Preview</h3>
-      <p>Mirror any page for up to 5 seconds, then redirect—no leaks in HTML or scripts.</p>
-    </div>
-    <div class="feature">
-      <h3>Edge-Powered Speed</h3>
-      <p>Hosted on Cloudflare Workers. Redirects in under 50ms worldwide.</p>
-    </div>
-    <div class="feature">
-      <h3>Simple API</h3>
-      <p>Generate encrypted links with one function. Integrates with Python, Node.js, or any stack.</p>
-    </div>
-  </section>
-  <footer>
-    &copy; ${new Date().getFullYear()} Short GK • <a href="https://t.me/GKBotz" target="_blank">GKBotz on Telegram</a>
-  </footer>
-</body>
-</html>`, {
-    headers: { 'Content-Type': 'text/html; charset=UTF-8' }
+</body></html>`, {
+    headers:{'Content-Type':'text/html;charset=UTF-8'}
   })
 }
 
 export default {
   async fetch(request) {
-    const url   = new URL(request.url)
-    const path  = url.pathname
-    const token = path.slice(1)
+    const url    = new URL(request.url)
+    const path   = url.pathname
+    const token  = path.slice(1)
+    const go     = url.searchParams.has('go')
+    const assetU = url.searchParams.get('asset')
 
-    if (!token) {
-      return renderLanding()
+    // 1) Landing
+    if(!token) return renderLanding()
+
+    // 2) Asset proxy (images, CSS, JS, fonts, etc.)
+    if(assetU) {
+      try {
+        const decoded = decodeURIComponent(assetU)
+        const resp = await fetch(decoded, {
+          headers: { 'User-Agent':request.headers.get('User-Agent')||'' }
+        })
+        const h = new Headers(resp.headers)
+        h.set('Cache-Control','no-store')
+        return new Response(resp.body, {
+          status:resp.status,
+          headers:h
+        })
+      } catch { return new Response('Bad Request',{status:400}) }
     }
 
-    if (url.searchParams.has('go')) {
+    // 3) Final redirect
+    if(go) {
       let target
       try {
         target = await decryptToken(token)
-        if (!/^https?:\/\//.test(target)) throw new Error()
+        if(!/^https?:\/\//.test(target)) throw 0
       } catch {
-        return new Response('Bad Request', { status: 400 })
+        return new Response('Bad Request',{status:400})
       }
-      return new Response(null, {
-        status: 302,
-        headers: { 'Location': target, 'Cache-Control': 'no-store' }
+      return new Response(null,{
+        status:302,
+        headers:{'Location':target,'Cache-Control':'no-store'}
       })
     }
 
+    // 4) Initial proxy + inject delayed redirect
     let target
     try {
       target = await decryptToken(token)
-      if (!/^https?:\/\//.test(target)) throw new Error()
+      if(!/^https?:\/\//.test(target)) throw 0
     } catch {
-      return new Response('Bad Request', { status: 400 })
+      return new Response('Bad Request',{status:400})
     }
-
-    const res = await fetch(target, {
-      headers: { 'User-Agent': request.headers.get('User-Agent') || '' }
+    const res = await fetch(target,{
+      headers:{ 'User-Agent':request.headers.get('User-Agent')||'' }
     })
-    const ct  = res.headers.get('Content-Type') || ''
-
-    if (ct.includes('text/html')) {
+    const ct  = res.headers.get('Content-Type')||''
+    if(ct.includes('text/html')) {
       return new HTMLRewriter()
         .on('head', new HeadInjector(path))
-        .on('a',    new AnchorRewriter(path))
+        .on('img',  new LinkRewriter(path))
+        .on('script', new LinkRewriter(path))
+        .on('link', new LinkRewriter(path))
         .transform(res)
     }
-
-    const headers = new Headers(res.headers)
-    headers.set('Cache-Control', 'no-store')
-    return new Response(res.body, {
-      status: res.status,
-      statusText: res.statusText,
-      headers
+    // non-HTML fallback
+    const h = new Headers(res.headers)
+    h.set('Cache-Control','no-store')
+    return new Response(res.body,{
+      status:res.status, headers:h
     })
   }
 }
