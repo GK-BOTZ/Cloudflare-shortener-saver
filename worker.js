@@ -1,7 +1,8 @@
-const SECRET_KEY       = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet'
+const SECRET_KEY        = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet'
 const REDIRECT_DELAY_MS = 5000
 
 async function importKey() {
+    // SubtleCrypto requires raw key to be exactly 16, 24 or 32 bytes
     return crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(SECRET_KEY),
@@ -12,28 +13,34 @@ async function importKey() {
 }
 
 async function encryptToken(plain) {
-    const iv = crypto.getRandomValues(new Uint8Array(12))
-    const key = await importKey()
-    const encoded = new TextEncoder().encode(plain)
-    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded)
+    const iv   = crypto.getRandomValues(new Uint8Array(12))
+    const key  = await importKey()
+    const data = new TextEncoder().encode(plain)
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data)
     const buf = new Uint8Array(iv.byteLength + cipher.byteLength)
     buf.set(iv, 0)
     buf.set(new Uint8Array(cipher), iv.byteLength)
     return btoa(String.fromCharCode(...buf))
-        .replace(/\+/g,'-')
-        .replace(/\//g,'_')
-        .replace(/=+$/,'')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
 }
 
 async function decryptToken(token) {
-    const bin = atob(token.replace(/-/g,'+').replace(/_/g,'/'))
+    const bin   = atob(token.replace(/-/g, '+').replace(/_/g, '/'))
     const bytes = Uint8Array.from(bin, c => c.charCodeAt(0))
-    const iv = bytes.slice(0,12)
-    const data = bytes.slice(12)
-    const key = await importKey()
-    const dec = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data)
+    const iv    = bytes.slice(0, 12)
+    const data  = bytes.slice(12)
+    const key   = await importKey()
+    const dec   = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data)
     return new TextDecoder().decode(dec)
 }
+
+const shortenersList = [
+    { domain: 'linkcents.com',     apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' },
+    { domain: 'arolinks.com',       apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' },
+    { domain: 'linkshortify.com',   apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' }
+]
 
 class HeadInjector {
     constructor(path) { this.path = path }
@@ -48,10 +55,10 @@ class HeadInjector {
 class LinkRewriter {
     constructor(path) { this.path = path }
     element(el) {
-        const attr = el.tagName==='LINK'?'href':'src'
-        const url = el.getAttribute(attr)
+        const attr = el.tagName === 'LINK' ? 'href' : 'src'
+        const url  = el.getAttribute(attr)
         if (url && /^https?:\/\//.test(url)) {
-            el.setAttribute(attr, this.path+'?asset='+encodeURIComponent(url))
+            el.setAttribute(attr, this.path + '?asset=' + encodeURIComponent(url))
         }
     }
 }
@@ -67,7 +74,7 @@ header{background:#007acc;color:#fff;padding:2rem;text-align:center}
 <header><h1>Short GK</h1><nav><a href="https://t.me/GKBotz" style="color:#fff">Telegram Channel</a></nav></header>
 <section class="hero"><h2>Secure & Invisible URL Shortener</h2><a class="btn" href="#start">Get Started</a></section>
 </body></html>`, {
-        headers:{'Content-Type':'text/html;charset=UTF-8'}
+        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
     })
 }
 
@@ -76,21 +83,42 @@ addEventListener('fetch', event => {
 })
 
 async function handleRequest(request) {
-    const url = new URL(request.url)
-    const path = url.pathname
-    const go = url.searchParams.has('go')
-    const assetU = url.searchParams.get('asset')
-    const origin = url.origin
+    const url     = new URL(request.url)
+    const path    = url.pathname
+    const origin  = url.origin
+    const goFlag  = url.searchParams.has('go')
+    const assetU  = url.searchParams.get('asset')
 
-    // 1) /short?url=LONG → return encrypted‐token URL
-    if (path === '/short') {
+    // 1) Shorten endpoint: /short or root with ?url=
+    if ((path === '/short' || path === '/') && url.searchParams.has('url')) {
         const longUrl = url.searchParams.get('url')
-        if (!longUrl) return new Response('Missing url parameter', { status: 400 })
-        const token = await encryptToken(longUrl)
-        return new Response(`${origin}/${token}`, { status: 200 })
+        const index   = shortenersList.length === 1
+            ? 0
+            : Math.floor(Math.random() * shortenersList.length)
+        const { domain, apiKey } = shortenersList[index]
+        const apiUrl = `https://${domain}/api`
+        const params = new URLSearchParams({ api: apiKey, url: longUrl, format: 'text' })
+        let res = await fetch(`${apiUrl}?${params.toString()}`)
+        if (res.ok) {
+            const text = await res.text()
+            if (text) {
+                const tokenUrl = `${origin}/${await encryptToken(text)}`
+                return new Response(tokenUrl, { status: 200 })
+            }
+        }
+        params.set('format', 'json')
+        res = await fetch(`${apiUrl}?${params.toString()}`)
+        if (res.ok) {
+            const data = await res.json()
+            const short = data.shortenedUrl || longUrl
+            const tokenUrl = `${origin}/${await encryptToken(short)}`
+            return new Response(tokenUrl, { status: 200 })
+        }
+        const fallback = `${origin}/${await encryptToken(longUrl)}`
+        return new Response(fallback, { status: 200 })
     }
 
-    // 2) Landing page
+    // 2) Landing page when no token
     const token = path.slice(1)
     if (!token) {
         return renderLanding()
@@ -101,18 +129,18 @@ async function handleRequest(request) {
         try {
             const decoded = decodeURIComponent(assetU)
             const resp = await fetch(decoded, {
-                headers: { 'User-Agent': request.headers.get('User-Agent')||'' }
+                headers: { 'User-Agent': request.headers.get('User-Agent') || '' }
             })
             const h = new Headers(resp.headers)
-            h.set('Cache-Control','no-store')
+            h.set('Cache-Control', 'no-store')
             return new Response(resp.body, { status: resp.status, headers: h })
         } catch {
             return new Response('Bad Request', { status: 400 })
         }
     }
 
-    // 4) Final redirect (go=1)
-    if (go) {
+    // 4) Final redirect if go=1
+    if (goFlag) {
         let target
         try {
             target = await decryptToken(token)
@@ -135,9 +163,9 @@ async function handleRequest(request) {
         return new Response('Bad Request', { status: 400 })
     }
     const res = await fetch(target, {
-        headers: { 'User-Agent': request.headers.get('User-Agent')||'' }
+        headers: { 'User-Agent': request.headers.get('User-Agent') || '' }
     })
-    const ct = res.headers.get('Content-Type')||''
+    const ct  = res.headers.get('Content-Type') || ''
     if (ct.includes('text/html')) {
         return new HTMLRewriter()
             .on('head', new HeadInjector(path))
@@ -147,6 +175,6 @@ async function handleRequest(request) {
             .transform(res)
     }
     const h = new Headers(res.headers)
-    h.set('Cache-Control','no-store')
+    h.set('Cache-Control', 'no-store')
     return new Response(res.body, { status: res.status, headers: h })
 }
