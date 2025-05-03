@@ -1,10 +1,16 @@
 addEventListener('fetch', event => { event.respondWith(handleRequest(event.request)) })
 
-const SECRET_KEY        = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet' const shortenersList = [ { domain: 'linkcents.com',   apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' }, { domain: 'arolinks.com',    apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' }, { domain: 'linkshortify.com',apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' } ] const ENCRYPT_BASE = 'https://encrypt.gkbotz.workers.dev'
+const SECRET_KEY        = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet' 
+const shortenersList = [ { domain: 'linkcents.com',   apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' }, { domain: 'arolinks.com',    apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' }, { domain: 'linkshortify.com',apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' } ] const ENCRYPT_BASE = 'https://encrypt.gkbotz.workers.dev'
 
 async function importKey() { return crypto.subtle.importKey( 'raw', new TextEncoder().encode(SECRET_KEY), { name: 'AES-GCM' }, false, ['encrypt'] ) }
 
-async function encryptToken(plain) { const iv   = crypto.getRandomValues(new Uint8Array(12)) const key  = await importKey() const data = new TextEncoder().encode(plain) const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data) const buf = new Uint8Array(iv.byteLength + cipher.byteLength) buf.set(iv, 0) buf.set(new Uint8Array(cipher), iv.byteLength) const token = btoa(String.fromCharCode(...buf)) .replace(/+/g, '-') .replace(///g, '_') .replace(/=+$/, '') return token }
+async function encryptToken(plain) { 
+    const iv   = crypto.getRandomValues(new Uint8Array(12)) 
+    const key  = await importKey() const data = new TextEncoder().encode(plain) 
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data) 
+    const buf = new Uint8Array(iv.byteLength + cipher.byteLength) buf.set(iv, 0) buf.set(new Uint8Array(cipher), iv.byteLength) 
+    const token = btoa(String.fromCharCode(...buf)) .replace(/+/g, '-') .replace(///g, '_') .replace(/=+$/, '') return token }
 
 function renderLanding() { return new Response(`<!DOCTYPE html>
 
@@ -46,7 +52,10 @@ function renderLanding() { return new Response(`<!DOCTYPE html>
 </html>`, {
         headers: { 'Content-Type': 'text/html;charset=UTF-8' }
     })
-}async function handleRequest(request) { const url = new URL(request.url) const path = url.pathname const longUrl = url.searchParams.get('url')
+}async function handleRequest(request) { 
+        const url = new URL(request.url) 
+        const path = url.pathname
+        const longUrl = url.searchParams.get('url')
 
 if (path === '/' && !longUrl) {
     return renderLanding()
