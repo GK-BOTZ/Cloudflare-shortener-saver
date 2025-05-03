@@ -31,12 +31,12 @@ function renderLanding() { return new Response(`<!DOCTYPE html>
         <div id="result" style="margin-top:1rem;"></div>
     </div>
     <script>
-        document.getElementById('shorten-form').addEventListener('submit', async e => {
+        document.getElementById('shorten-form').addEventListener('submit', async function(e) {
             e.preventDefault()
             const url = document.getElementById('url-input').value
-            const resp = await fetch(`?url=${encodeURIComponent(url)}`)
+            const resp = await fetch('?url=' + encodeURIComponent(url))
             const short = await resp.text()
-            document.getElementById('result').innerHTML = `<p>Encrypted URL: <a href="${short}" target="_blank">${short}</a></p>`
+            document.getElementById('result').innerHTML = '<p>Encrypted URL: <a href="' + short + '" target="_blank">' + short + '</a></p>'
         })
     </script>
 </body>
@@ -77,7 +77,6 @@ if (!short) {
     short = longUrl
 }
 
-// Return encrypted URL without extra requests
 const encoded = encodeURIComponent(short)
 const encryptedUrl = `${ENCRYPT_WORKER_BASE}/${encoded}`
 return new Response(encryptedUrl, { status: 200 })
