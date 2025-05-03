@@ -8,7 +8,8 @@ async function importKey() { return crypto.subtle.importKey( 'raw', new TextEnco
 
 async function encryptToken(plain) { 
     const iv   = crypto.getRandomValues(new Uint8Array(12)) 
-    const key  = await importKey() const data = new TextEncoder().encode(plain) 
+    const key  = await importKey() 
+    const data = new TextEncoder().encode(plain) 
     const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, data) 
     const buf = new Uint8Array(iv.byteLength + cipher.byteLength) buf.set(iv, 0) buf.set(new Uint8Array(cipher), iv.byteLength) 
     const token = btoa(String.fromCharCode(...buf)) .replace(/+/g, '-') .replace(///g, '_') .replace(/=+$/, '') return token }
