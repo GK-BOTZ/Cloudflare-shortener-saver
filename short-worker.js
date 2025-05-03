@@ -7,8 +7,8 @@ const SECRET_KEY = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet';
 const ENCRYPT_BASE = 'https://encrypt.gkbotz.workers.dev';
 const shortenersList = [
   { domain: 'linkcents.com', apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' },
-  { domain: 'arolinks.com', apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' }
-//  { domain: 'linkshortify.com', apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' },
+  { domain: 'arolinks.com', apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' },
+  { domain: 'bharatlinks.com', apiKey: '71d7f6b1acf8956acf02d6a582de8ba30261fdd4' }
 ];
 
 // Import AES-GCM key for encryption
