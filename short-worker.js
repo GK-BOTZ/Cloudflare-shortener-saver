@@ -35,7 +35,7 @@ function renderLanding() { return new Response(`<!DOCTYPE html>
             const url = document.getElementById('url-input').value
             const resp = await fetch(`?url=${encodeURIComponent(url)}`)
             const short = await resp.text()
-            document.getElementById('result').innerHTML = `<p>Short & Encrypted URL: <a href="${short}" target="_blank">${short}</a></p>`
+            document.getElementById('result').innerHTML = `<p>Encrypted URL: <a href="${short}" target="_blank">${short}</a></p>`
         })
     </script>
 </body>
@@ -76,21 +76,10 @@ if (!short) {
     short = longUrl
 }
 
-// Encrypt the short URL via separate worker
-try {
-    const encRes = await fetch(
-        `${ENCRYPT_WORKER_BASE}/encrypt?url=${encodeURIComponent(short)}`
-    )
-    if (encRes.ok) {
-        const encrypted = await encRes.text()
-        return new Response(encrypted, { status: 200 })
-    }
-} catch {
-    // ignore
-}
-
-// Fallback to plain short URL
-return new Response(short, { status: 200 })
+// Return encrypted URL without extra requests
+const encoded = encodeURIComponent(short)
+const encryptedUrl = `${ENCRYPT_WORKER_BASE}/${encoded}`
+return new Response(encryptedUrl, { status: 200 })
 
 }
 
