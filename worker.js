@@ -2,7 +2,6 @@ const SECRET_KEY        = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet'
 const REDIRECT_DELAY_MS = 5000
 
 async function importKey() {
-    // SubtleCrypto requires raw key to be exactly 16, 24 or 32 bytes
     return crypto.subtle.importKey(
         'raw',
         new TextEncoder().encode(SECRET_KEY),
@@ -37,9 +36,9 @@ async function decryptToken(token) {
 }
 
 const shortenersList = [
-    { domain: 'linkcents.com',     apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' },
-    { domain: 'arolinks.com',       apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' },
-    { domain: 'linkshortify.com',   apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' }
+    { domain: 'linkcents.com',   apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' },
+    { domain: 'arolinks.com',     apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' },
+    { domain: 'linkshortify.com', apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' }
 ]
 
 class HeadInjector {
@@ -89,7 +88,16 @@ async function handleRequest(request) {
     const goFlag  = url.searchParams.has('go')
     const assetU  = url.searchParams.get('asset')
 
-    // 1) Shorten endpoint: /short or root with ?url=
+    if (path.startsWith('/decrypt/')) {
+        const token = path.slice(9)
+        try {
+            const target = await decryptToken(token)
+            return new Response(target, { status: 200 })
+        } catch {
+            return new Response('Bad Request', { status: 400 })
+        }
+    }
+
     if ((path === '/short' || path === '/') && url.searchParams.has('url')) {
         const longUrl = url.searchParams.get('url')
         const index   = shortenersList.length === 1
@@ -118,13 +126,11 @@ async function handleRequest(request) {
         return new Response(fallback, { status: 200 })
     }
 
-    // 2) Landing page when no token
     const token = path.slice(1)
     if (!token) {
         return renderLanding()
     }
 
-    // 3) Asset proxy
     if (assetU) {
         try {
             const decoded = decodeURIComponent(assetU)
@@ -139,7 +145,6 @@ async function handleRequest(request) {
         }
     }
 
-    // 4) Final redirect if go=1
     if (goFlag) {
         let target
         try {
@@ -154,7 +159,6 @@ async function handleRequest(request) {
         })
     }
 
-    // 5) Initial proxy + delayed redirect injection
     let target
     try {
         target = await decryptToken(token)
@@ -165,7 +169,7 @@ async function handleRequest(request) {
     const res = await fetch(target, {
         headers: { 'User-Agent': request.headers.get('User-Agent') || '' }
     })
-    const ct  = res.headers.get('Content-Type') || ''
+    const ct = res.headers.get('Content-Type') || ''
     if (ct.includes('text/html')) {
         return new HTMLRewriter()
             .on('head', new HeadInjector(path))
