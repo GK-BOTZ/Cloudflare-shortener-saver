@@ -35,12 +35,6 @@ async function decryptToken(token) {
     return new TextDecoder().decode(dec)
 }
 
-const shortenersList = [
-    { domain: 'linkcents.com',   apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' },
-    { domain: 'arolinks.com',     apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' },
-    { domain: 'linkshortify.com', apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' }
-]
-
 class HeadInjector {
     constructor(path) { this.path = path }
     element(el) {
@@ -82,55 +76,29 @@ addEventListener('fetch', event => {
 })
 
 async function handleRequest(request) {
-    const url     = new URL(request.url)
-    const path    = url.pathname
-    const origin  = url.origin
-    const goFlag  = url.searchParams.has('go')
-    const assetU  = url.searchParams.get('asset')
+    const url    = new URL(request.url)
+    const path   = url.pathname
+    const origin = url.origin
+    const goFlag = url.searchParams.has('go')
+    const assetU = url.searchParams.get('asset')
 
-    if (path.startsWith('/decrypt/')) {
-        const token = path.slice(9)
-        try {
-            const target = await decryptToken(token)
-            return new Response(target, { status: 200 })
-        } catch {
-            return new Response('Bad Request', { status: 400 })
-        }
-    }
-
-    if ((path === '/short' || path === '/') && url.searchParams.has('url')) {
+    // 1) Encrypt endpoint: /encrypt?url=LONG
+    if (path === '/encrypt' && url.searchParams.has('url')) {
         const longUrl = url.searchParams.get('url')
-        const index   = shortenersList.length === 1
-            ? 0
-            : Math.floor(Math.random() * shortenersList.length)
-        const { domain, apiKey } = shortenersList[index]
-        const apiUrl = `https://${domain}/api`
-        const params = new URLSearchParams({ api: apiKey, url: longUrl, format: 'text' })
-        let res = await fetch(`${apiUrl}?${params.toString()}`)
-        if (res.ok) {
-            const text = await res.text()
-            if (text) {
-                const tokenUrl = `${origin}/${await encryptToken(text)}`
-                return new Response(tokenUrl, { status: 200 })
-            }
+        if (!longUrl) {
+            return new Response('Missing url parameter', { status: 400 })
         }
-        params.set('format', 'json')
-        res = await fetch(`${apiUrl}?${params.toString()}`)
-        if (res.ok) {
-            const data = await res.json()
-            const short = data.shortenedUrl || longUrl
-            const tokenUrl = `${origin}/${await encryptToken(short)}`
-            return new Response(tokenUrl, { status: 200 })
-        }
-        const fallback = `${origin}/${await encryptToken(longUrl)}`
-        return new Response(fallback, { status: 200 })
+        const token = await encryptToken(longUrl)
+        return new Response(`${origin}/${token}`, { status: 200 })
     }
 
+    // 2) Landing page when no token
     const token = path.slice(1)
     if (!token) {
         return renderLanding()
     }
 
+    // 3) Asset proxy
     if (assetU) {
         try {
             const decoded = decodeURIComponent(assetU)
@@ -145,6 +113,7 @@ async function handleRequest(request) {
         }
     }
 
+    // 4) Final redirect if go=1
     if (goFlag) {
         let target
         try {
@@ -159,6 +128,7 @@ async function handleRequest(request) {
         })
     }
 
+    // 5) Initial proxy + delayed redirect injection
     let target
     try {
         target = await decryptToken(token)
