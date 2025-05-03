@@ -1,19 +1,59 @@
-addEventListener('fetch', event => { event.respondWith(handleRequest(event.request)); });
+addEventListener('fetch', event => {
+  event.respondWith(handleRequest(event.request));
+});
 
-const SECRET_KEY = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet'; const ENCRYPT_BASE = 'https://encrypt.gkbotz.workers.dev'; const shortenersList = [ { domain: 'linkcents.com', apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' }, { domain: 'arolinks.com', apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' }, { domain: 'linkshortify.com', apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' } ];
+// Configuration
+const SECRET_KEY = 'csCFNLEU4hG4OglLkqi5S82gTGQ3Onet';
+const ENCRYPT_BASE = 'https://encrypt.gkbotz.workers.dev';
+const shortenersList = [
+  { domain: 'linkcents.com', apiKey: '7d36dcbb8d07110d2691ceab1825eef2bc4c002b' },
+  { domain: 'arolinks.com', apiKey: '858dc03a78bfdbab21239e0f0c83d54282b91fc7' },
+  { domain: 'linkshortify.com', apiKey: 'a77fbdbf8066126f4da2300228df51f3ab662254' },
+];
 
-async function importKey() { const rawKey = new TextEncoder().encode(SECRET_KEY); return crypto.subtle.importKey( 'raw', rawKey, { name: 'AES-GCM' }, false, ['encrypt'] ); }
+// Import AES-GCM key for encryption
+async function importKey() {
+  const rawKey = new TextEncoder().encode(SECRET_KEY);
+  return crypto.subtle.importKey(
+    'raw',
+    rawKey,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt']
+  );
+}
 
-async function encryptToken(plain) { const iv = crypto.getRandomValues(new Uint8Array(12)); const key = await importKey(); const data = new TextEncoder().encode(plain); const cipherBuffer = await crypto.subtle.encrypt( { name: 'AES-GCM', iv }, key, data ); const cipherArray = new Uint8Array(cipherBuffer); const combined = new Uint8Array(iv.length + cipherArray.length); combined.set(iv, 0); combined.set(cipherArray, iv.length); const token = btoa(String.fromCharCode.apply(null, combined)); return token .replace(/+/g, '-') .replace(///g, '_') .replace(/=+$/, ''); }
+// Encrypt the URL token
+async function encryptToken(plain) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await importKey();
+  const data = new TextEncoder().encode(plain);
+  const cipherBuffer = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    data
+  );
+  const cipherArray = new Uint8Array(cipherBuffer);
+  const combined = new Uint8Array(iv.length + cipherArray.length);
+  combined.set(iv, 0);
+  combined.set(cipherArray, iv.length);
+  const token = btoa(String.fromCharCode(...combined));
+  return token
+    .replace(/\+/g, '-') // Replace '+' with '-'
+    .replace(/\//g, '_') // Replace '/' with '_'
+    .replace(/=+$/, ''); // Remove trailing '='
+}
 
-function renderLanding() { const html = `<!DOCTYPE html>
-
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>URL Shortener</title>
-    <style>
+// Render the landing page
+function renderLanding() {
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>URL Shortener</title>
+      <style>
         body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 0; }
         .container { max-width: 600px; margin: 5rem auto; background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #333; }
@@ -22,73 +62,83 @@ function renderLanding() { const html = `<!DOCTYPE html>
         button { padding: 0.5rem 1rem; background: #007acc; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background: #005fa3; }
         #result a { word-break: break-all; }
-    </style>
-</head>
-<body>
-    <div class="container">
+      </style>
+    </head>
+    <body>
+      <div class="container">
         <h1>URL Shortener</h1>
         <form id="shorten-form">
-            <input type="url" id="url-input" placeholder="Enter URL to shorten" required />
-            <button type="submit">Shorten</button>
+          <input type="url" id="url-input" placeholder="Enter URL to shorten" required />
+          <button type="submit">Shorten</button>
         </form>
         <div id="result" style="margin-top:1rem;"></div>
-    </div>
-    <script>
+      </div>
+      <script>
         const form = document.getElementById('shorten-form');
         form.addEventListener('submit', async event => {
-            event.preventDefault();
-            const url = document.getElementById('url-input').value;
-            const response = await fetch('?url=' + encodeURIComponent(url));
-            const short = await response.text();
-            const resultDiv = document.getElementById('result');
-            resultDiv.innerHTML = `<p>Encrypted URL: <a href="${short}" target="_blank">${short}</a></p>`;
+          event.preventDefault();
+          const url = document.getElementById('url-input').value;
+          const response = await fetch('?url=' + encodeURIComponent(url));
+          const short = await response.text();
+          const resultDiv = document.getElementById('result');
+          resultDiv.innerHTML = \`<p>Encrypted URL: <a href="\${short}" target="_blank">\${short}</a></p>\`;
         });
-    </script>
-</body>
-</html>`;
-    return new Response(html, {
-        headers: { 'Content-Type': 'text/html;charset=UTF-8' }
-    });
-}async function handleRequest(request) { const url = new URL(request.url); const path = url.pathname; const longUrl = url.searchParams.get('url');
+      </script>
+    </body>
+    </html>
+  `;
+  return new Response(html, {
+    headers: { 'Content-Type': 'text/html;charset=UTF-8' },
+  });
+}
 
-if (path === '/' && !longUrl) {
+// Handle incoming requests
+async function handleRequest(request) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  const longUrl = url.searchParams.get('url');
+
+  // Serve landing page if no URL parameter is provided
+  if (path === '/' && !longUrl) {
     return renderLanding();
-}
+  }
 
-if (!longUrl) {
+  // Validate URL parameter
+  if (!longUrl) {
     return new Response('Missing url parameter', { status: 400 });
-}
+  }
 
-// Shorten URL
-const index = Math.floor(Math.random() * shortenersList.length);
-const { domain, apiKey } = shortenersList[index];
-const apiUrl = `https://${domain}/api`;
-const params = new URLSearchParams({ api: apiKey, url: longUrl, format: 'text' });
+  // Select a random URL shortener
+  const index = Math.floor(Math.random() * shortenersList.length);
+  const { domain, apiKey } = shortenersList[index];
+  const apiUrl = `https://${domain}/api`;
+  const params = new URLSearchParams({ api: apiKey, url: longUrl, format: 'text' });
 
-let res = await fetch(`${apiUrl}?${params}`);
-let short = '';
-if (res.ok) {
+  // Attempt to shorten URL (text format)
+  let short = '';
+  let res = await fetch(`${apiUrl}?${params}`);
+  if (res.ok) {
     short = await res.text() || '';
-}
+  }
 
-if (!short) {
+  // Fallback to JSON format if text format fails
+  if (!short) {
     params.set('format', 'json');
     res = await fetch(`${apiUrl}?${params}`);
     if (res.ok) {
-        const data = await res.json();
-        short = data.shortenedUrl || '';
+      const data = await res.json();
+      short = data.shortenedUrl || '';
     }
-}
+  }
 
-if (!short) {
+  // Use original URL if shortening fails
+  if (!short) {
     short = longUrl;
+  }
+
+  // Encrypt the shortened URL and return
+  const token = await encryptToken(short);
+  const encoded = encodeURIComponent(token);
+  const encryptedUrl = `${ENCRYPT_BASE}/${encoded}`;
+  return new Response(encryptedUrl, { status: 200 });
 }
-
-// Encrypt and return final URL
-const token = await encryptToken(short);
-const encoded = encodeURIComponent(token);
-const encryptedUrl = `${ENCRYPT_BASE}/${encoded}`;
-return new Response(encryptedUrl, { status: 200 });
-
-}
-
